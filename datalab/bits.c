@@ -186,7 +186,7 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return ~x + 1;
+    return ~x + 1;
 }
 //3
 /* 
@@ -213,7 +213,9 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+    int flag = ((!!x) << 31) >> 31;
+
+    return (y & flag) | (z & ~flag);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -223,8 +225,19 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+    int neg_x = ~x + 1;//-x
+    int sign = 1 << 31;//sign bit
+    int res = neg_x + y;//y - x
+
+	  int neg_x_AND_sign = neg_x & sign;
+	  int y_AND_sign = y & sign;
+	  int res_AND_sign = res & sign;
+
+    int overflow_check =(neg_x_AND_sign & y_AND_sign & ~res_AND_sign) | (~neg_x_AND_sign & ~y_AND_sign & res_AND_sign);
+
+    return (!(res_AND_sign ^ overflow_check)) | !(x ^ sign);
 }
+
 //4
 /* 
  * logicalNeg - implement the ! operator, using all of 
@@ -235,6 +248,7 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
+    
   return 2;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
