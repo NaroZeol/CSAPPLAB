@@ -229,14 +229,15 @@ int isLessOrEqual(int x, int y) {
     int sign = 1 << 31;//sign bit
     int res = neg_x + y;//y - x
 
-	  int neg_x_AND_sign = neg_x & sign;
-	  int y_AND_sign = y & sign;
-	  int res_AND_sign = res & sign;
+	int neg_x_AND_sign = neg_x & sign;
+	int y_AND_sign = y & sign;
+	int res_AND_sign = res & sign;
 
     int overflow_check =(neg_x_AND_sign & y_AND_sign & ~res_AND_sign) | (~neg_x_AND_sign & ~y_AND_sign & res_AND_sign);
 
     return (!(res_AND_sign ^ overflow_check)) | !(x ^ sign);
 }
+
 
 //4
 /* 
@@ -248,8 +249,9 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-    
-  return 2;
+    int neg_x = ~x + 1;
+    int flag = (neg_x | x ) >> 31;
+    return (flag & 1) ^ 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -264,7 +266,39 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+    int signFlag = 1 << 31;
+    int negMask = (x & signFlag) >> 31;//当x为负数时该数每一位都为1，非负数时全为0
+
+    int temp = 0;
+    int ans = 0;
+    int half = 0;
+    
+    x = (~x & negMask) | (x & ~negMask);//如果x为负数则取反，非负数则不变 
+    temp = x;
+
+    half = !!(temp >> 16);
+    ans = ans + (half << 4);
+    temp = temp >> (half << 4);
+
+    half = !!(temp >> 8);
+    ans = ans + (half  << 3);
+    temp = temp >> (half << 3);
+
+    half = !!(temp >> 4);
+    ans = ans + (half << 2);
+    temp = temp >> (half << 2);
+
+    half = !!(temp >> 2);
+    ans = ans + (half  << 1);
+    temp = temp >> (half << 1);
+
+    half = !!(temp >> 1);
+    ans = ans + half;
+    temp = temp >> half;
+
+    ans = ans + temp;;
+
+    return ans + 1;
 }
 //float
 /* 
