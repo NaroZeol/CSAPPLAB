@@ -261,6 +261,7 @@ int logicalNeg(int x) {
  *            howManyBits(0)  = 1
  *            howManyBits(-1) = 1
  *            howManyBits(0x80000000) = 32
+ * 0x7AAAAAA
  *  Legal ops: ! ~ & ^ | + << >>
  *  Max ops: 90
  *  Rating: 4
@@ -312,8 +313,26 @@ int howManyBits(int x) {
  *   Max ops: 30
  *   Rating: 4
  */
-unsigned floatScale2(unsigned uf) {
-  return 2;
+unsigned floatScale2(unsigned uf)
+{
+    // 31->s, 30~23->exp, 22~0->n
+    unsigned sign = (1 << 31) & uf;
+    unsigned exp = (uf >> 23) & 0xFF;
+    unsigned n = uf & 0x7FFFFF;
+
+    unsigned ret = 0;
+
+    if (exp == 0xFF)
+        return uf;
+
+    if (exp)
+        exp = exp + 1;
+    else
+        n = n << 1;
+
+    ret = sign + (exp << 23) + n;
+
+    return ret;
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -328,7 +347,37 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+    // 31->s, 30~23->exp, 22~0->n
+    int tMin = 1 << 31;
+    int sign = (tMin) & uf;//为负时为0x80000000，为正时为0。
+    int exp = (uf >> 23) & 0xFF;
+    int n = uf & 0x7FFFFF;
+
+    int bias = 0x7f;
+    int E;
+    int offset;
+
+    if (exp == 0xFF)
+        return tMin;
+    else if (!exp)
+        return 0;
+    
+    E = exp - bias;
+    if (E & (tMin))//E < 0, 则直接返回0
+        return 0;
+    else if (!((E + ~22) & (tMin))){
+        return tMin;
+    }
+    
+    n = n | (1 << 23);
+    offset = 23 + (~E + 1);
+
+    n = n >> offset;
+
+    if (sign)
+        n = ~n + 1;
+
+    return  n;
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -344,5 +393,28 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+    // 31->s, 30~23->exp, 22~0->n
+    unsigned n = 0;
+    unsigned exp = 0;
+
+    int tMin = 1 << 31;
+    int offset = 0;
+    int bias = 0x7f;
+    
+
+    if ((x + bias + ~0) & tMin){//检查x <= bias是否成立
+        offset = 23 + x;
+        if (offset & tMin)
+            return 0;
+        
+        n = 1 << offset;
+    }
+    else{
+        exp = bias + x;
+        if (!((x + ~0x7f) & tMin)){
+            exp = (0x7f << 1) + 1;
+        }
+    }
+
+    return (exp << 23) + n;
 }
