@@ -143,7 +143,7 @@ int main(int argc, char **argv)
 
 	/* Read command line */
 	if (emit_prompt) {
-	    printf("%s", prompt);
+        sio_puts(prompt);
 	    fflush(stdout);
 	}
     rReadSignal = 0;
@@ -181,6 +181,9 @@ void eval(char *cmdline)
 {
     if (cmdline == NULL)
         return;
+    if (cmdline[0] == '\n')
+        return;
+
     static char *argvArray[MAXARGS];
     
     int bg;
@@ -228,9 +231,14 @@ void eval(char *cmdline)
     sigprocmask(SIG_SETMASK, &prev, NULL);
     if (!bg)
         waitfg(pid);
-    else
-        printf("[%d] (%d) %s", newJob->jid, newJob->pid, newJob->cmdline);
-
+    else{
+        sio_puts("[");
+        sio_putl(newJob->jid);
+        sio_puts("] (");
+        sio_putl(newJob->pid);
+        sio_puts(") ");
+        sio_puts(newJob->cmdline);
+    }
     return;
 }
 
@@ -327,6 +335,8 @@ void do_bgfg(char **argv)
     struct job_t *pStopJob = NULL;
     int mode = -1;   //0: by pid, 1: by gruop id
     int id;
+
+    int bg = (strcmp("bg", argv[0]) == 0) ? 1 : 0;
     if (argv[1] != NULL && argv[1][0] == '%'){
         mode = 1;
         id = atoi(argv[1] + 1);
@@ -335,10 +345,20 @@ void do_bgfg(char **argv)
         mode = 0;
         id = atoi(argv[1]);
     }
-    else{
-        printf("%s:  argument must be a PID or %%jobid\n", argv[0]);
+    else if (argv[1] == NULL){
+        if (bg)
+            sio_puts("bg");
+        else
+            sio_puts("fg");
+        sio_puts(" command requires PID or %jobid argument\n");
         return;
     }
+    else{
+        sio_puts(argv[0]);
+        sio_puts(":  argument must be a PID or %jobid\n");
+        return;
+    }
+
     for (int i = 0; i != MAXJOBS; ++i){
         if (mode == 0 && jobs[i].pid == id){
             pStopJob = &jobs[i];
@@ -352,19 +372,27 @@ void do_bgfg(char **argv)
     
     if (pStopJob == NULL){
         if (mode == 0){
-            printf("(%d): No such process\n", id);
+            sio_puts("(");
+            sio_putl(id);
+            sio_puts("): No such process\n");
         }
         else{
-            printf("%%%d: No such job\n", id);
+            sio_puts("%");
+            sio_putl(id);
+            sio_puts(": No such job\n");
         }
         return;
     }
 
-    int bg = (strcmp("bg", argv[0]) == 0) ? 1 : 0;
     
     if (bg){
         pStopJob->state = BG;
-        printf("[%d] (%d) %s", pStopJob->jid, pStopJob->pid ,pStopJob->cmdline);
+        sio_puts("[");
+        sio_putl(pStopJob->jid);
+        sio_puts("] (");
+        sio_putl(pStopJob->pid);
+        sio_puts(") ");
+        sio_puts(pStopJob->cmdline);
         Kill(pStopJob->pid, SIGCONT);
     }
     else{
@@ -449,7 +477,11 @@ void sigint_handler(int sig)
             is_find = 1;
             Kill(stopSign, SIGINT);
             
-            printf("Job [%d] (%d) terminated by signal 2\n", jobs[i].jid, jobs[i].pid);
+            sio_puts("Job [");
+            sio_putl(jobs[i].jid);
+            sio_puts("] (");
+            sio_putl(jobs[i].pid);
+            sio_puts(") terminated by signal 2\n");
             break;
         }
     }
@@ -478,7 +510,11 @@ void sigtstp_handler(int sig)
             is_find = 1;
             Kill(stopSign, SIGTSTP);
 
-            printf("Job [%d] (%d) stopped by signal 20\n", jobs[i].jid, jobs[i].pid);
+            sio_puts("Job [");
+            sio_putl(jobs[i].jid);
+            sio_puts("] (");
+            sio_putl(jobs[i].pid);
+            sio_puts(") stopped by signal 20\n");
             break;
         }
     }
@@ -547,7 +583,8 @@ int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline)
             return 1;
 	}
     }
-    printf("Tried to create too many jobs\n");
+
+    sio_puts("Tried to create too many jobs\n");
     return 0;
 }
 
@@ -722,11 +759,13 @@ void sigquit_handler(int sig)
 
 //safe io functions
 ssize_t sio_puts(char s[]){
+    if (s == NULL)
+        return 0;
     return write(STDOUT_FILENO, s, strlen(s));
 }
 
 ssize_t sio_putl(long v){
-    char s[128];
+    char s[MAXLINE];
     sprintf(s, "%ld", v); //sprintf is thread safe
     return sio_puts(s);
 }
