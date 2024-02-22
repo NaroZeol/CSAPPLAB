@@ -412,7 +412,6 @@ void waitfg(pid_t pid)
     sigset_t waitSign;
     sigemptyset(&waitSign);
     while (!stopSign){
-        //printf("waitting....\n");
         sigsuspend(&waitSign);
     }    
     return;
@@ -442,12 +441,27 @@ void sigchld_handler(int sig)
     while (1){
         int is_find = 0;
         for (int i = 0; i != MAXJOBS; ++i){
-            if (waitpid(jobs[i].pid, NULL, WNOHANG) > 0){
-                stopSign = jobs[i].pid;
-                deletejob(jobs, stopSign);
+            int status;
+            if (waitpid(jobs[i].pid, &status, WNOHANG) > 0){
+                if (WIFSIGNALED(status) && WTERMSIG(status) == SIGINT){
+                    sio_puts("Job [");
+                    sio_putl(jobs[i].jid);
+                    sio_puts("] (");
+                    sio_putl(jobs[i].pid);
+                    sio_puts(") terminated by signal 2\n");
+                }
                 is_find = 1;
+                stopSign = jobs[i].pid;
+                deletejob(jobs, jobs[i].pid);
             }
             else if (waitpid(jobs[i].pid, NULL, WUNTRACED | WNOHANG) > 0){
+
+                sio_puts("Job [");
+                sio_putl(jobs[i].jid);
+                sio_puts("] (");
+                sio_putl(jobs[i].pid);
+                sio_puts(") stopped by signal 20\n");
+                
                 if (jobs[i].state == FG)    
                     stopSign = jobs[i].pid;
                 jobs[i].state = ST;
@@ -473,15 +487,8 @@ void sigint_handler(int sig)
     int is_find = 0;
     for (int i = 0; i != MAXJOBS; ++i){
         if (jobs[i].state == FG){
-            stopSign = jobs[i].pid;
             is_find = 1;
-            Kill(stopSign, SIGINT);
-            
-            sio_puts("Job [");
-            sio_putl(jobs[i].jid);
-            sio_puts("] (");
-            sio_putl(jobs[i].pid);
-            sio_puts(") terminated by signal 2\n");
+            Kill(jobs[i].pid, SIGINT);
             break;
         }
     }
@@ -505,16 +512,9 @@ void sigtstp_handler(int sig)
     int is_find = 0;
     for (int i = 0; i != MAXJOBS; ++i){
         if (jobs[i].state == FG){
-            stopSign = jobs[i].pid;
-            jobs[i].state = ST;
             is_find = 1;
-            Kill(stopSign, SIGTSTP);
-
-            sio_puts("Job [");
-            sio_putl(jobs[i].jid);
-            sio_puts("] (");
-            sio_putl(jobs[i].pid);
-            sio_puts(") stopped by signal 20\n");
+            Kill(jobs[i].pid, SIGTSTP);
+            jobs[i].state = ST;
             break;
         }
     }
