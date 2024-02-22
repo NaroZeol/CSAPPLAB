@@ -204,8 +204,13 @@ void eval(char *cmdline)
             //printf("Proc:\npid: %d pgid: %d", getpid(), getpgrp());
             //fflush(stdout);
             sigprocmask(SIG_SETMASK, &prev, NULL);
-            if (argvArray != NULL || argvArray[0] != NULL || environ == NULL || execve(argvArray[0], argvArray, environ) == -1){
-                printf("%s: Command not found.\n", argvArray[0]);
+            if (argvArray == NULL || argvArray[0] == NULL || environ == NULL){
+                sio_puts("Error: argvArray or environ is NULL\n");
+                return;
+            }
+            if (execve(argvArray[0], argvArray, environ) == -1){
+                sio_puts(argvArray[0]);
+                sio_puts(": Command not found.\n");
                 exit(0);
             }
         }
