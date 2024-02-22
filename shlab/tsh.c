@@ -12,8 +12,6 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
-#define __USE_XOPEN_EXTENDED
-#include <bits/sigaction.h>
 #include <bits/types/sigset_t.h>
 
 /* Misc manifest constants */
@@ -91,6 +89,11 @@ void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 int Kill(pid_t pid, int sig);
+
+//safe io functions
+ssize_t sio_puts(char s[]);
+ssize_t sio_putl(long v);
+void sio_error(char s[]);
 
 /*
  * main - The shell's main routine 
@@ -176,6 +179,8 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline) 
 {
+    if (cmdline == NULL)
+        return;
     static char *argvArray[MAXARGS];
     
     int bg;
@@ -199,7 +204,7 @@ void eval(char *cmdline)
             //printf("Proc:\npid: %d pgid: %d", getpid(), getpgrp());
             //fflush(stdout);
             sigprocmask(SIG_SETMASK, &prev, NULL);
-            if (execve(argvArray[0], argvArray, environ) == -1){
+            if (argvArray != NULL || argvArray[0] != NULL || environ == NULL || execve(argvArray[0], argvArray, environ) == -1){
                 printf("%s: Command not found.\n", argvArray[0]);
                 exit(0);
             }
@@ -287,6 +292,9 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if (argv == NULL || argv[0] == NULL){
+        return 0;
+    }
     if (strcmp("fg", argv[0]) == 0 || strcmp("bg", argv[0])== 0){
         do_bgfg(argv);
         return 1;
@@ -707,4 +715,18 @@ void sigquit_handler(int sig)
 }
 
 
+//safe io functions
+ssize_t sio_puts(char s[]){
+    return write(STDOUT_FILENO, s, strlen(s));
+}
 
+ssize_t sio_putl(long v){
+    char s[128];
+    sprintf(s, "%ld", v); //sprintf is thread safe
+    return sio_puts(s);
+}
+
+void sio_error(char s[]){
+    sio_puts(s);
+    _exit(1);
+}
