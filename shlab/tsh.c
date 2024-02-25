@@ -488,7 +488,7 @@ void sigint_handler(int sig)
     for (int i = 0; i != MAXJOBS; ++i){
         if (jobs[i].state == FG){
             is_find = 1;
-            Kill(jobs[i].pid, SIGINT);
+            Kill(-jobs[i].pid, SIGINT);
             break;
         }
     }
@@ -513,7 +513,7 @@ void sigtstp_handler(int sig)
     for (int i = 0; i != MAXJOBS; ++i){
         if (jobs[i].state == FG){
             is_find = 1;
-            Kill(jobs[i].pid, SIGTSTP);
+            Kill(-jobs[i].pid, SIGTSTP);
             jobs[i].state = ST;
             break;
         }
