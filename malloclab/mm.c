@@ -83,15 +83,12 @@ team_t team = {
 #define TRUE 1
 #define FALSE 0
 
-/* Define of data structure */
-/* List Head Pointer */
-static char **free_lists;
-static const int groupSize = 28;
-// Data Structure
+static char **free_lists; // 用于存放空闲链表的数组
+static const int group_size = 28;
 
 static int binary_search(int size) {
     int left = 0;
-    int right = groupSize - 1;
+    int right = group_size - 1;
     while (left <= right) {
         int mid = (left + right) / 2;
         if (size <= (1 << (mid + 4))) {
@@ -172,24 +169,25 @@ static void insert_node(char *p, int group_index){
  */
 int mm_init(void)
 {
-    free_lists = mem_sbrk(sizeof(char *) * groupSize);
-    for (int i = 0; i < groupSize; i++) {
+    free_lists = mem_sbrk(sizeof(char *) * group_size);
+    for (int i = 0; i < group_size; i++) {
         free_lists[i] = NULL;
     }
     return 0;
 }
 
 /* 
- * mm_malloc - Allocate a block by incrementing the brk pointer.
- *     Always allocate a block whose size is a multiple of the alignment.
+ * mm_malloc - Allocate a block
  */
 void *mm_malloc(size_t size)
 {
-    if (size == 0)
-        return NULL;
+    if (size == 0) {
+        fprintf(stderr, "mm_malloc: size = 0\n");
+        exit(1);
+    }
 
-    int newsize = ALIGN(size) + 8;
-    int indexOfRes = 0;
+    int new_size = ALIGN(size) + 8;
+    int res_index = 0;
     int is_find = FALSE;
     char *res = NULL;
 
@@ -198,14 +196,14 @@ void *mm_malloc(size_t size)
     #endif
 
     // 通过二分查找找到最大的小于要求的组的下表
-    int start = binary_search(newsize);
-    for (int i = start; i < groupSize; i++) {
+    int start = binary_search(new_size);
+    for (int i = start; i < group_size; i++) {
         if (free_lists[i] != NULL) {
             char *p = free_lists[i];
             while (p != NULL) {
-                if (GET_SIZE(p) >= newsize) {
+                if (GET_SIZE(p) >= new_size) {
                     res = p;
-                    indexOfRes = i;
+                    res_index = i;
                     is_find = TRUE;
                     break;
                 }
@@ -219,27 +217,27 @@ void *mm_malloc(size_t size)
 
     if (is_find == TRUE) { //找到后我们进行一些处理就可以把它交给用户了
         //从链表中删除节点
-        delete_node(res, indexOfRes); 
+        delete_node(res, res_index); 
 
         // 如果得到的节点的大小比要求的大小大16字节（这表示我们至少还能分割出一个节点），则将其分割为两个节点
         // 而且我们保证newsize是向8对齐的，所以不用在意是否会出现不对齐的问题
-        if (GET_SIZE(res) - newsize >= 16){
+        if (GET_SIZE(res) - new_size >= 16){
             int oldnodeSize = GET_SIZE(res);
-            char *newNode;
-            int newNodeSize =oldnodeSize - newsize;
+            char *new_node;
+            int new_node_size =oldnodeSize - new_size;
 
-            newNode = res + newsize; // 在满足原有节点的情况下的新节点地址
-            SET_SIZE(res, newsize);
+            new_node = res + new_size; // 在满足原有节点的情况下的新节点地址
+            SET_SIZE(res, new_size);
 
-            SET_SIZE(newNode, newNodeSize); // 这两条设置头部
-            SET_ALLOC(newNode, FALSE);      //
-            SET_FOOTER(newNode);            // 将头部的内容复制到脚部
-            SET_PREV(newNode, NULL);
-            SET_NEXT(newNode, NULL);
+            SET_SIZE(new_node, new_node_size); // 这两条设置头部
+            SET_ALLOC(new_node, FALSE);      //
+            SET_FOOTER(new_node);            // 将头部的内容复制到脚部
+            SET_PREV(new_node, NULL);
+            SET_NEXT(new_node, NULL);
 
             // 二分查找找到要插入的组
-            int inseartIndex = binary_search(newNodeSize);
-            insert_node(newNode, inseartIndex);
+            int inseart_index = binary_search(new_node_size);
+            insert_node(new_node, inseart_index);
 
             #ifdef DEBUG
                 printf("mm_malloc: newsize = %d, nodesize = %d\n", newsize, GET_SIZE(res));
@@ -258,20 +256,20 @@ void *mm_malloc(size_t size)
         return res + 8; // 返回有效载荷的首地址
     }
     else { //如果根本没有在池中找到可用的节点，调整堆指针，开辟一段新的空间
-        char *newSpace =  (char *)mem_sbrk(newsize);
-        if ((int)newSpace == -1) {
+        char *new_space =  (char *)mem_sbrk(new_size);
+        if ((int)new_space == -1) {
             return NULL;
         }
 
-        SET_SIZE(newSpace, newsize);
-        SET_ALLOC(newSpace, TRUE);
-        SET_RIGHT_NODE_WHEN_ALLOC(newSpace); // 在右侧节点根本没有存在的情况下去设置是否有一些问题。。。
+        SET_SIZE(new_space, new_size);
+        SET_ALLOC(new_space, TRUE);
+        SET_RIGHT_NODE_WHEN_ALLOC(new_space); // 在右侧节点根本没有存在的情况下去设置是否有一些问题。。。
         #ifdef DEBUG
             printf("mm_malloc: address = %p ,newsize = %d, nodesize = %d, ", newSpace, newsize, GET_SIZE(newSpace));
             printf("status: new alloc from heap\n");
         #endif
 
-        return newSpace + 8;
+        return new_space + 8;
     }
 }
 
@@ -359,7 +357,7 @@ static char * try_merge_free_node(char *node) {
     #ifdef DEBUG
         printf("try_merge_free_node: new_node = %p\n", new_node);
     #endif
-    new_node = try_merge_free_node(new_node);
+    new_node = try_merge_free_node(new_node); // 递归尝试合并
     return new_node;
 }
 
