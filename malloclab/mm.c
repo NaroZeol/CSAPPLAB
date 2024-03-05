@@ -192,7 +192,7 @@ void *mm_malloc(size_t size)
     char *res = NULL;
 
     #ifdef DEBUG
-        printf("mm_malloc: newsize = %d\n", newsize);
+        printf("mm_malloc: newsize = %d\n", new_size);
     #endif
 
     // 通过二分查找找到最大的小于要求的组的下表
@@ -222,9 +222,9 @@ void *mm_malloc(size_t size)
         // 如果得到的节点的大小比要求的大小大16字节（这表示我们至少还能分割出一个节点），则将其分割为两个节点
         // 而且我们保证newsize是向8对齐的，所以不用在意是否会出现不对齐的问题
         if (GET_SIZE(res) - new_size >= 16){
-            int oldnodeSize = GET_SIZE(res);
+            int old_node_size = GET_SIZE(res);
             char *new_node;
-            int new_node_size =oldnodeSize - new_size;
+            int new_node_size = old_node_size - new_size;
 
             new_node = res + new_size; // 在满足原有节点的情况下的新节点地址
             SET_SIZE(res, new_size);
@@ -240,13 +240,13 @@ void *mm_malloc(size_t size)
             insert_node(new_node, inseart_index);
 
             #ifdef DEBUG
-                printf("mm_malloc: newsize = %d, nodesize = %d\n", newsize, GET_SIZE(res));
-                printf("mm_malloc: split node %p (size = %d) into %p (size = %d) and %p (size = %d)\n", res, oldnodeSize, res, newsize, newNode, newNodeSize);
+                printf("mm_malloc: newsize = %d, nodesize = %d\n", new_size, GET_SIZE(res));
+                printf("mm_malloc: split node %p (size = %d) into %p (size = %d) and %p (size = %d)\n", res, old_node_size, res, new_size, new_node, new_node_size);
             #endif
         }// 分割节点操作结束
 
         #ifdef DEBUG
-            printf("mm_malloc: adress = %p ,newsize = %d, nodesize = %d, ", res, newsize, GET_SIZE(res));
+            printf("mm_malloc: adress = %p ,newsize = %d, nodesize = %d, ", res, new_size, GET_SIZE(res));
             printf("status: alloc from free list\n");
         #endif
         // 处理分配信息
@@ -265,7 +265,7 @@ void *mm_malloc(size_t size)
         SET_ALLOC(new_space, TRUE);
         SET_RIGHT_NODE_WHEN_ALLOC(new_space); // 在右侧节点根本没有存在的情况下去设置是否有一些问题。。。
         #ifdef DEBUG
-            printf("mm_malloc: address = %p ,newsize = %d, nodesize = %d, ", newSpace, newsize, GET_SIZE(newSpace));
+            printf("mm_malloc: address = %p ,newsize = %d, nodesize = %d, ", new_space, new_size, GET_SIZE(new_space));
             printf("status: new alloc from heap\n");
         #endif
 
