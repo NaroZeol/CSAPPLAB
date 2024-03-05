@@ -104,6 +104,69 @@ static int binary_search(int size) {
     return right;
 }
 
+#ifdef DEBUG
+static int check(char *to_check){
+    if (to_check == NULL) {
+        return 1;
+    }
+    if (to_check < (char *)(mem_heap_lo() + 112) || to_check > (char *)(mem_heap_hi() + 1)) {
+        return 0;
+    }
+    return 1;
+}
+#endif
+
+static void delete_node(char *p, int group_index) {
+    char *prev =  GET_PREV(p);
+    char *next = GET_NEXT(p);
+
+    #ifdef DEBUG
+        if ((check(p) && check(prev) && check(next)) == 0) {
+            printf("\nError Happened\n\n");
+            printf("delete_node: check failed\n");
+            printf("delete_node: p = %p, prev = %p, next = %p, nodesize = %d\n", p, prev, next, GET_SIZE(p));
+            printf("current brk %p -> %p\n", mem_heap_lo(), mem_heap_hi());
+            exit(0);
+        }
+        else
+            printf("delete_node: p = %p, prev = %p, next = %p, nodesize = %d\n", p, prev, next, GET_SIZE(p));
+    #endif
+
+    // 前节点指向后节点
+    if (prev == NULL) { //prev为空意味着这是链表的第一个节点
+        free_lists[group_index] = next; // 将链表数组中的对应项设为next
+    }
+    else { // 不是第一项
+        SET_NEXT(prev, next); // 将前节点指向后节点
+    }
+
+    // 后节点指向前节点
+    if (next != NULL) {
+        SET_PREV(next, prev); 
+    }
+}
+
+static void insert_node(char *p, int group_index){
+    #ifdef DEBUG
+        if (check(p) == 0) {
+            printf("insert_node: check failed\n");
+            printf("insert_node: p = %p to group %d\n", p, group_index);
+            exit(0);
+        }
+        else
+            printf("insert_node: p = %p to group %d, nodesize = %d\n", p, group_index, GET_SIZE(p));
+    #endif
+
+    // 总是插入到链表的头部
+    char *next = free_lists[group_index];
+    free_lists[group_index] = p;
+    SET_NEXT(p, next);
+    SET_PREV(p, NULL);
+    if (next != NULL) {
+        SET_PREV(next, p);
+    }
+}
+
 /* 
  * mm_init - initialize the malloc package.
  */
@@ -129,7 +192,11 @@ void *mm_malloc(size_t size)
     int indexOfRes = 0;
     int is_find = FALSE;
     char *res = NULL;
-    
+
+    #ifdef DEBUG
+        printf("mm_malloc: newsize = %d\n", newsize);
+    #endif
+
     // 通过二分查找找到最大的小于要求的组的下表
     int start = binary_search(newsize);
     for (int i = start; i < groupSize; i++) {
@@ -151,33 +218,18 @@ void *mm_malloc(size_t size)
     }
 
     if (is_find == TRUE) { //找到后我们进行一些处理就可以把它交给用户了
-        // 将节点与原链表断绝关系
-        char *pre = GET_PREV(res);
-        char *next = GET_NEXT(res);
-        // 与前节点断绝关系
-        if (pre == NULL) {// 为了便于操作，我们将位于最上方的链表节点的前驱设置为NULL，这样就可以分辨是否是最上方节点
-            free_lists[indexOfRes] = next;
-        }else{
-            SET_NEXT(pre, next);
-        }
-        // 与后节点断绝关系
-        if (next != NULL) { // 如果本身就是最后一个节点，就什么都不用做
-            SET_PREV(next, pre); 
-        }
+        //从链表中删除节点
+        delete_node(res, indexOfRes); 
 
         // 如果得到的节点的大小比要求的大小大16字节（这表示我们至少还能分割出一个节点），则将其分割为两个节点
         // 而且我们保证newsize是向8对齐的，所以不用在意是否会出现不对齐的问题
         if (GET_SIZE(res) - newsize >= 16){
-            #ifdef DEBUG
-                printf("Try to split the node\n");
-            #endif
+            int oldnodeSize = GET_SIZE(res);
             char *newNode;
-            int newNodeSize = GET_SIZE(res) - newsize;
+            int newNodeSize =oldnodeSize - newsize;
 
             newNode = res + newsize; // 在满足原有节点的情况下的新节点地址
             SET_SIZE(res, newsize);
-            SET_ALLOC(res, TRUE);
-            SET_RIGHT_NODE_WHEN_ALLOC(res);
 
             SET_SIZE(newNode, newNodeSize); // 这两条设置头部
             SET_ALLOC(newNode, FALSE);      //
@@ -187,16 +239,21 @@ void *mm_malloc(size_t size)
 
             // 二分查找找到要插入的组
             int inseartIndex = binary_search(newNodeSize);
-            if (free_lists[inseartIndex] == NULL){ // 如果要插入的组为空组
-                free_lists[inseartIndex] = newNode; // 直接设置free_list指向newNode，我们前面已经把prev和next设为NULL了
-            }
-            else {
-                char *next = free_lists[inseartIndex]; // 不为空组，那么就插入到头部
-                free_lists[inseartIndex] = newNode; // 将free_list直接指向newNode
-                SET_PREV(next, newNode); // 将之前的头部节点的prev指向新节点
-                SET_NEXT(newNode, next); // 将新节点的next指向原来的头部节点
-            }  
+            insert_node(newNode, inseartIndex);
+
+            #ifdef DEBUG
+                printf("mm_malloc: newsize = %d, nodesize = %d\n", newsize, GET_SIZE(res));
+                printf("mm_malloc: split node %p (size = %d) into %p (size = %d) and %p (size = %d)\n", res, oldnodeSize, res, newsize, newNode, newNodeSize);
+            #endif
         }// 分割节点操作结束
+
+        #ifdef DEBUG
+            printf("mm_malloc: adress = %p ,newsize = %d, nodesize = %d, ", res, newsize, GET_SIZE(res));
+            printf("status: alloc from free list\n");
+        #endif
+        // 处理分配信息
+        SET_ALLOC(res, TRUE);
+        SET_RIGHT_NODE_WHEN_ALLOC(res);
 
         return res + 8; // 返回有效载荷的首地址
     }
@@ -209,13 +266,17 @@ void *mm_malloc(size_t size)
         SET_SIZE(newSpace, newsize);
         SET_ALLOC(newSpace, TRUE);
         SET_RIGHT_NODE_WHEN_ALLOC(newSpace); // 在右侧节点根本没有存在的情况下去设置是否有一些问题。。。
+        #ifdef DEBUG
+            printf("mm_malloc: address = %p ,newsize = %d, nodesize = %d, ", newSpace, newsize, GET_SIZE(newSpace));
+            printf("status: new alloc from heap\n");
+        #endif
 
         return newSpace + 8;
     }
 }
 
 
-char * try_merge_free_node(char *node) {
+static char * try_merge_free_node(char *node) {
     // 获取各种信息
     int size = GET_SIZE(node);
     int left_alloc = (IS_LEFTEST(node) == TRUE) ? TRUE : IS_LEFT_ALLOC(node); // 如果是最左边的节点，那么认为它的左节点是已分配的
@@ -230,37 +291,19 @@ char * try_merge_free_node(char *node) {
         char *left_node = node - left_node_size;
         char *right_node = node + size;
 
-        char *pre = NULL;
-        char *next = NULL;
         int index = 0;
 
+        #ifdef DEBUG
+            printf("try_merge_free_node: left_node = %p, current_node = %p, right_node = %p\n", left_node, node, right_node);
+        #endif
+
         // 从链表中删除左节点
-        pre = GET_PREV(left_node);
-        next = GET_NEXT(left_node);
-        // 二分查找找到左节点所在的组
         index = binary_search(left_node_size);
-        if (pre == NULL) {
-            free_lists[index] = next;
-        } else {
-            SET_NEXT(pre, next);
-        }
-        if (next != NULL) {
-            SET_PREV(next, pre);
-        }
+        delete_node(left_node, index);
 
         // 从链表中删除右节点
-        pre = GET_PREV(right_node);
-        next = GET_NEXT(right_node);
-        // 二分查找找到右节点所在的组
         index = binary_search(right_node_size);
-        if (pre == NULL) {
-            free_lists[index] = next;
-        } else {
-            SET_NEXT(pre, next);
-        }
-        if (next != NULL) {
-            SET_PREV(next, pre);
-        }
+        delete_node(right_node, index);
 
         // 合并节点
         SET_SIZE(left_node, left_node_size + size + right_node_size);
@@ -274,18 +317,13 @@ char * try_merge_free_node(char *node) {
         int left_node_size = GET_SIZE_FROM_FOOTER(node - 4);
         char *left_node = node - left_node_size;
 
+        #ifdef DEBUG
+            printf("try_merge_free_node: left_node = %p, current_node = %p\n", left_node, node);
+        #endif
+
         // 从链表中删除左节点
-        char *pre = GET_PREV(left_node);
-        char *next = GET_NEXT(left_node);
         int index = binary_search(left_node_size);// 二分查找找到左节点所在的组
-        if (pre == NULL) {
-            free_lists[index] = next;
-        } else {
-            SET_NEXT(pre, next);
-        }
-        if (next != NULL) {
-            SET_PREV(next, pre);
-        }
+        delete_node(left_node, index);
 
         // 合并节点
         SET_SIZE(left_node, left_node_size + size);
@@ -299,18 +337,14 @@ char * try_merge_free_node(char *node) {
         int right_node_size = GET_SIZE(node + size);
         char *right_node = node + size;
 
+        #ifdef DEBUG
+            printf("try_merge_free_node: current_node = %p, right_node = %p\n", node, right_node);
+        #endif
+
         // 从链表中删除右节点
-        char *pre = GET_PREV(right_node);
-        char *next = GET_NEXT(right_node);
         int index = binary_search(right_node_size);// 二分查找找到右节点所在的组
-        if (pre == NULL) {
-            free_lists[index] = next;
-        } else {
-            SET_NEXT(pre, next);
-        }
-        if (next != NULL) {
-            SET_PREV(next, pre);
-        }
+        delete_node(right_node, index);
+
         // 合并节点 
         SET_SIZE(node, size + right_node_size);
         SET_ALLOC(node, FALSE);
@@ -334,6 +368,9 @@ char * try_merge_free_node(char *node) {
  */
 void mm_free(void *ptr)
 {
+    #ifdef DEBUG
+        printf("mm_free: ptr = %p\n", ptr);
+    #endif
     char *node = GET_NODE_FROM_PAYLOAD(ptr);
     SET_ALLOC(node, FALSE);
     SET_FOOTER(node);
@@ -343,20 +380,16 @@ void mm_free(void *ptr)
     node = try_merge_free_node(node);
     SET_NEXT(node, NULL);
     SET_PREV(node, NULL);
+    SET_RIGHT_NODE_WHEN_FREE(node);
 
     // 将节点插入到链表中
     int node_size = GET_SIZE(node);
     int index = binary_search(node_size);
-    if (free_lists[index] == NULL){ // 如果要插入的组为空组
-        free_lists[index] = node; // 直接设置free_list指向newNode，我们前面已经把prev和next设为NULL了
-    }
-    else {
-        char *next = free_lists[index]; // 不为空组，那么就插入到头部
-        free_lists[index] = node; // 将free_list直接指向newNode
-        SET_PREV(next, node); // 将之前的头部节点的prev指向新节点
-        SET_NEXT(node, next); // 将新节点的next指向原来的头部节点
-    }
+    insert_node(node, index);
 
+    #ifdef DEBUG
+        printf("mm_free complete: group = %d, prev = %p, next = %p\n", index, GET_PREV(node), GET_NEXT(node));
+    #endif
     return;
 }
 
