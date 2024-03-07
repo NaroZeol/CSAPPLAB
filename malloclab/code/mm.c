@@ -396,17 +396,119 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-    void *oldptr = ptr;
-    void *newptr;
-    size_t copySize;
-
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
+    if (size == 0) { // 如果size为0，直接释放这个节点
+        mm_free(ptr);
         return NULL;
-    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
-    if (size < copySize)
-        copySize = size;
-    memcpy(newptr, oldptr, copySize);
-    mm_free(oldptr);
-    return newptr;
+    }
+
+    int new_node_size = ALIGN(size) + 8; // 实际需要的节点大小，包括存储信息的头部
+    char *node = GET_NODE_FROM_PAYLOAD(ptr);
+    int node_size = GET_SIZE(node);
+    #ifdef DEBUG
+        printf("mm_realloc: ptr = %p, old_size = %d ,new_size = %d\n", ptr, node_size, new_node_size);
+    #endif
+
+    if (new_node_size == node_size) { // 如果new_size和原来的大小一样，直接返回原来的指针 
+        return ptr;
+    }
+
+    if (new_node_size < node_size) { // 如果小于原来的节点
+        #ifdef DEBUG
+            printf("mm_realloc: new_size < old_size\n");
+        #endif
+        if (node_size - new_node_size >= 16) { // 如果多出来的空间大于16字节，我们可以分割节点
+            char *new_node = node + node_size;
+
+            // 设置原节点的信息
+            SET_SIZE(node, new_node_size);
+            SET_ALLOC(node, TRUE);
+            SET_RIGHT_NODE_WHEN_ALLOC(node);
+
+            // 设置新节点的信息
+            SET_SIZE(new_node, node_size - new_node_size);
+            SET_ALLOC(new_node, FALSE);
+            SET_FOOTER(new_node);
+            SET_RIGHT_NODE_WHEN_FREE(new_node);
+
+            insert_node(new_node, binary_search(node_size - new_node_size));
+            
+            // 返回有效载荷的首地址
+            return ptr;
+        }
+        else { // 如果剩下的空间小于16字节，我们不分割节点，直接返回原来的指针
+            return ptr;
+        }
+    } else { // 如果大于原来的节点
+        #ifdef DEBUG
+            printf("mm_realloc: new_size > old_size\n");
+        #endif
+        if (IS_RIGHTEST(node) == TRUE) { // 如果是最右边的节点，我们直接调整堆指针
+            #ifdef DEBUG
+                printf("mm_realloc: this is the rightest node\n");
+            #endif
+            // 按理说应该要在这里检查堆是否有足够空间以防止调整堆指针失败输出错误信息，但是好像没有提供这个工具。
+            char *new_space = (char *)mem_sbrk(new_node_size - node_size); // 补足差额
+            if ((int)new_space != -1) { // 如果调整堆指针成功
+                SET_SIZE(node, new_node_size);
+                SET_ALLOC(node, TRUE);
+                SET_RIGHT_NODE_WHEN_ALLOC(node);
+                return ptr;
+            }
+        } else { // 如果不是最右边的节点，我们尝试合并右侧节点
+            char *right_node = node + node_size;
+            int total_size = 0; // 从右侧节点合并获得的总大小
+            
+            // 如果当前右侧节点，未分配，且不是最右边的节点，且当前的total_size还不足以满足new_size - node_size，继续合并
+            while (IS_RIGHTEST(right_node) == FALSE && GET_ALLOC(right_node) == FALSE && total_size < new_node_size - node_size) {
+                #ifdef DEBUG
+                    printf("mm_realloc: merge node %p", right_node);
+                #endif
+
+                int right_node_size = GET_SIZE(right_node);
+                total_size += right_node_size; // 计算合并后的大小
+
+                delete_node(right_node, binary_search(right_node_size)); // 从链表中删除右侧节点
+                SET_RIGHT_NODE_WHEN_FREE(right_node); // 设置右侧节点的标志位
+                right_node = right_node + right_node_size; // 移动到下一个节点
+            }
+
+            if (total_size + node_size >= new_node_size) { // 如果合并后的大小足够补全差额
+                int new_node_size = total_size + node_size;
+
+                // 设置原节点的信息
+                SET_SIZE(node, new_node_size);
+                SET_ALLOC(node, TRUE);
+                SET_RIGHT_NODE_WHEN_ALLOC(node);
+
+                return ptr;
+            }
+            else if (total_size > 0 && IS_RIGHTEST(right_node) == TRUE) { // 如果合并后最后合并的节点为最右侧的节点，那么我们从堆中再补全差额 
+                int diff = new_node_size - node_size - total_size;
+                char *new_space = (char *)mem_sbrk(diff);
+                if ((int)new_space == -1) { // 无法分配内存
+                    return NULL;
+                }
+
+                SET_SIZE(node, diff + total_size + node_size); // 设置新节点（其实还是在原node的位置）的大小
+                SET_ALLOC(node, TRUE); // 设置新节点的分配标志位
+                SET_RIGHT_NODE_WHEN_ALLOC(node); // 设置新节点的右侧节点的标志位
+
+                return ptr; // 返回有效载荷的首地址
+            } 
+        }
+
+        // 山穷水尽，无法通过合并右侧节点来满足new_size
+        char *new_ptr =  (char *)mm_malloc(size); // 重新分配一个新的节点
+        if (new_ptr == NULL) { // 无法分配内存
+            return NULL;
+        }
+        #ifdef DEBUG
+            printf("mm_realloc: finally, we can't satisfy new_size\n");
+            printf("mm_realloc: new_ptr = %p\n", new_ptr);
+        #endif
+
+        memcpy(new_ptr, ptr, node_size - 8); // 将原节点的内容复制到新节点
+        mm_free(ptr); // 释放原节点
+        return new_ptr; // 返回新的有效载荷的首地址
+    }
 }
