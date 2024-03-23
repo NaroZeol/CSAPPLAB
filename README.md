@@ -9,4 +9,4 @@ CMU CS15213: CSAPP的LAB个人解答。
 - [ ] cachelab
 - [x] [shlab](./shlab/题解思路.md)
 - [x] [malloclab](./malloclab/题解思路.md)
-- [ ] proxylab
+- [x] [proxylab](./proxylab/题解思路.md)
